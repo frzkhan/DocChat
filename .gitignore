@@ -1,0 +1,40 @@
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Node dependencies
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.DS_Store
+.fleet
+.idea
+*.swp
+*.swo
+
+# Local env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Storage (uploaded documents and vector database)
+storage/
+storage/vectordb.sqlite
+storage/vectordb.sqlite-wal
+storage/vectordb.sqlite-shm
+storage/lancedb/
+
+# Old Nuxt files (can be removed)
+.nuxt/
+.nitro/
+.output/
