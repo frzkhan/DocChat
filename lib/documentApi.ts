@@ -113,22 +113,6 @@ export async function fetchDocuments(): Promise<ProcessedDocument[]> {
   }
 }
 
-export async function fetchDocumentText(id: string): Promise<string> {
-  try {
-    const response = await fetch(`/api/documents/${id}`)
-    const data = await response.json()
-    
-    if (data.success && data.document) {
-      return data.document.text
-    }
-    
-    throw new Error(data.error || 'Failed to fetch document text')
-  } catch (error) {
-    console.error('Error fetching document text:', error)
-    throw error
-  }
-}
-
 export async function deleteDocument(id: string): Promise<void> {
   try {
     const response = await fetch(`/api/documents/${id}`, {
@@ -141,36 +125,6 @@ export async function deleteDocument(id: string): Promise<void> {
     }
   } catch (error) {
     console.error('Error deleting document:', error)
-    throw error
-  }
-}
-
-export async function searchDocuments(
-  query: string,
-  limit: number = 5,
-  documentIds?: string[]
-): Promise<Array<{ documentId: string; documentName: string; text: string; chunkIndex: number }>> {
-  try {
-    const response = await fetch('/api/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query,
-        limit,
-        documentIds: documentIds && documentIds.length > 0 ? documentIds : undefined
-      })
-    })
-    const data = await response.json()
-    
-    if (data.success && data.chunks) {
-      return data.chunks
-    }
-    
-    throw new Error(data.error || 'Search failed')
-  } catch (error) {
-    console.error('Error searching documents:', error)
     throw error
   }
 }
