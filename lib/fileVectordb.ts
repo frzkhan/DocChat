@@ -303,3 +303,51 @@ export async function deleteDocumentChunks(documentId: string): Promise<void> {
   }
 }
 
+export interface DocumentStats {
+  totalDocuments: number
+  totalChunks: number
+  documents: Array<{
+    documentId: string
+    documentName: string
+    chunkCount: number
+  }>
+}
+
+export async function getDocumentStats(): Promise<DocumentStats> {
+  try {
+    const database = getDatabase()
+    
+    // Get count of distinct documents and total chunks
+    const statsQuery = database.prepare(`
+      SELECT 
+        document_id,
+        document_name,
+        COUNT(*) as chunk_count
+      FROM document_chunks
+      GROUP BY document_id, document_name
+      ORDER BY document_name
+    `)
+    
+    const rows = statsQuery.all() as Array<{
+      document_id: string
+      document_name: string
+      chunk_count: number
+    }>
+    
+    const totalChunks = rows.reduce((sum, row) => sum + row.chunk_count, 0)
+    
+    return {
+      totalDocuments: rows.length,
+      totalChunks,
+      documents: rows.map(row => ({
+        documentId: row.document_id,
+        documentName: row.document_name,
+        chunkCount: row.chunk_count
+      }))
+    }
+  } catch (error) {
+    console.error('[FileVectorDB] Error getting document stats:', error)
+    throw error
+  }
+}
+

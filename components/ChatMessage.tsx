@@ -3,19 +3,30 @@
 import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import MermaidDiagram from './MermaidDiagram'
+
+interface ToolIndicator {
+  id: string
+  tool: string
+  message: string
+  timestamp: Date
+  active: boolean
+}
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  toolIndicators?: ToolIndicator[]
 }
 
 interface ChatMessageProps {
   message: Message
+  isStreaming?: boolean
 }
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message, isStreaming = false }: ChatMessageProps) {
   const [copied, setCopied] = useState(false)
 
   const formatTime = (date: Date) => {
@@ -57,6 +68,42 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         </div>
         <div className={`flex-1 min-w-0 flex gap-2 ${message.role === 'user' ? 'flex-row-reverse items-start' : 'flex-row items-start'}`}>
           <div className={`flex-1 min-w-0 ${message.role === 'user' ? 'flex items-end flex-col' : ''}`}>
+            {/* Tool Indicators */}
+            {message.role === 'assistant' && message.toolIndicators && message.toolIndicators.length > 0 && (
+              <div className="mb-2 space-y-1.5">
+                {message.toolIndicators.map((indicator) => (
+                  <div
+                    key={indicator.id}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-all ${
+                      indicator.active
+                        ? 'bg-chat-primary/10 border-chat-primary/30 text-chat-primary'
+                        : 'bg-chat-surface border-chat-border text-chat-text-muted'
+                    }`}
+                  >
+                    {indicator.tool === 'web_search' ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={indicator.active ? 'animate-spin' : ''}>
+                        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeDasharray="4 4" opacity="0.3"/>
+                        <path d="M8 2L8 6M8 10L8 14M2 8L6 8M10 8L14 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    ) : indicator.tool === 'document_search' ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={indicator.active ? 'animate-pulse' : ''}>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" fill="currentColor" opacity="0.2"/>
+                        <path d="M4 6a2 2 0 0 1 2-2h8v8a2 2 0 0 1-2 2H4V6z" fill="currentColor"/>
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                        <path d="M8 4V8L10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                    <span className="flex-1">{indicator.message}</span>
+                    {indicator.active && (
+                      <div className="w-2 h-2 rounded-full bg-chat-primary animate-pulse"></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className={`rounded-2xl px-4 py-3 shadow-lg ${
               message.role === 'user'
                 ? 'bg-gradient-to-br from-chat-primary to-chat-secondary text-white'
@@ -67,9 +114,46 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                   message.role === 'user' ? 'text-white' : 'text-chat-text'
                 }`}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
+                {message.content ? (
+                  <>
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ node, inline, className, children, ...props }) {
+                          const match = /language-(\w+)/.exec(className || '')
+                          const language = match && match[1]
+                          
+                          if (!inline && language === 'mermaid') {
+                            return (
+                              <MermaidDiagram chart={String(children).replace(/\n$/, '')} />
+                            )
+                          }
+                          
+                          // Default code block rendering
+                          return (
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          )
+                        }
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                    {isStreaming && message.role === 'assistant' && (
+                      <span className="inline-block w-0.5 h-4 ml-1 bg-chat-primary align-middle" style={{ animation: 'blink 1s ease-in-out infinite' }}></span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-chat-text-muted italic flex items-center gap-1.5">
+                    <span>Thinking</span>
+                    <span className="flex gap-0.5">
+                      <span className="w-1 h-1 rounded-full bg-chat-text-muted" style={{ animation: 'pulse 1.4s ease-in-out infinite', animationDelay: '0s' }}></span>
+                      <span className="w-1 h-1 rounded-full bg-chat-text-muted" style={{ animation: 'pulse 1.4s ease-in-out infinite', animationDelay: '0.2s' }}></span>
+                      <span className="w-1 h-1 rounded-full bg-chat-text-muted" style={{ animation: 'pulse 1.4s ease-in-out infinite', animationDelay: '0.4s' }}></span>
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
             <div className={`mt-1.5 text-xs text-chat-text-muted ${message.role === 'user' ? 'text-right' : 'text-left'}`}>

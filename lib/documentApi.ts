@@ -129,11 +129,21 @@ export async function deleteDocument(id: string): Promise<void> {
   }
 }
 
+export interface SSEEventHandlers {
+  onContent?: (chunk: string) => void
+  onToolStart?: (tool: string, message: string) => void
+  onToolEnd?: (tool: string, message: string) => void
+  onThinking?: (message: string) => void
+  onDone?: (data: { hasContext: boolean; chunksUsed: number; usedWebSearch: boolean }) => void
+  onError?: (error: string) => void
+}
+
 export async function askQuestion(
   question: string,
   documentIds?: string[],
-  limit: number = 5
-): Promise<{ answer: string; hasContext: boolean; chunksUsed: number }> {
+  limit: number = 5,
+  handlers?: SSEEventHandlers
+): Promise<void> {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -146,19 +156,77 @@ export async function askQuestion(
         limit
       })
     })
-    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
     
-    if (data.success) {
-      return {
-        answer: data.answer,
-        hasContext: data.hasContext || false,
-        chunksUsed: data.chunksUsed || 0
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) {
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true })
+      const chunks = buffer.split('\n\n')
+      buffer = chunks.pop() || ''
+
+      for (const chunk of chunks) {
+        if (!chunk.trim()) continue
+
+        let eventType = 'message'
+        let eventData = ''
+
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('event: ')) {
+            eventType = line.substring(7).trim()
+          } else if (line.startsWith('data: ')) {
+            eventData = line.substring(6).trim()
+          }
+        }
+
+        if (eventData) {
+          try {
+            const parsed = JSON.parse(eventData)
+            
+            switch (eventType) {
+              case 'content':
+                handlers?.onContent?.(parsed.chunk)
+                break
+              case 'tool_start':
+                handlers?.onToolStart?.(parsed.tool, parsed.message)
+                break
+              case 'tool_end':
+                handlers?.onToolEnd?.(parsed.tool, parsed.message)
+                break
+              case 'thinking':
+                handlers?.onThinking?.(parsed.message)
+                break
+              case 'done':
+                handlers?.onDone?.(parsed)
+                break
+              case 'error':
+                handlers?.onError?.(parsed.error)
+                break
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e, eventData)
+          }
+        }
       }
     }
-    
-    throw new Error(data.error || 'Failed to get answer')
   } catch (error) {
     console.error('Error asking question:', error)
+    handlers?.onError?.(error instanceof Error ? error.message : 'Unknown error')
     throw error
   }
 }

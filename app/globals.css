@@ -222,6 +222,61 @@ em {
   animation-delay: 0.4s;
 }
 
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  background: transparent;
+  padding: 1rem 0;
+  display: flex;
+  justify-content: center;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Ensure xychart elements are visible */
+.mermaid svg[aria-roledescription="xychart"] g > g > path,
+.mermaid svg g > g > path {
+  stroke: #6366f1 !important; /* chat-primary */
+  stroke-width: 2px !important;
+}
+
+.mermaid svg[aria-roledescription="xychart"] rect {
+  fill: #6366f1 !important; /* chat-primary */
+  opacity: 0.8;
+}
+
+.mermaid svg[aria-roledescription="xychart"] text {
+  fill: #e8e8f0 !important; /* chat-text */
+}
+
+/* Ensure all Mermaid text is visible */
+.mermaid svg text {
+  fill: #e8e8f0 !important; /* chat-text */
+}
+
+/* Ensure axes and grid lines are visible */
+.mermaid svg[aria-roledescription="xychart"] line {
+  stroke: #9ca3af !important; /* chat-text-muted */
+  stroke-width: 1px !important;
+}
+
+/* Ensure Mermaid diagrams are responsive */
+.markdown-content .mermaid {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

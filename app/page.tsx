@@ -13,11 +13,20 @@ import {
   type ProcessedDocument 
 } from '@/lib/documentApi'
 
+interface ToolIndicator {
+  id: string
+  tool: string
+  message: string
+  timestamp: Date
+  active: boolean
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  toolIndicators?: ToolIndicator[]
 }
 
 interface Document extends ProcessedDocument {
@@ -31,6 +40,7 @@ export default function Home() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
@@ -116,6 +126,21 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage])
 
     setIsLoading(true)
+    setIsStreaming(false)
+    
+    // Create assistant message for streaming
+    const assistantMessageId = (Date.now() + 1).toString()
+    let assistantContent = ''
+    const toolIndicators: ToolIndicator[] = []
+    
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      toolIndicators: []
+    }
+    setMessages(prev => [...prev, assistantMessage])
     
     try {
       // Use selected documents if any, otherwise use all available documents
@@ -134,27 +159,78 @@ export default function Home() {
           .map(doc => doc.id)
       }
 
-      // Get answer from OpenAI using document context
-      const response = await askQuestion(content.trim(), documentIds.length > 0 ? documentIds : undefined, 5)
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.answer,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, assistantMessage])
+      // Get answer from OpenAI using SSE streaming
+      await askQuestion(
+        content.trim(), 
+        documentIds.length > 0 ? documentIds : undefined, 
+        5,
+        {
+          onContent: (chunk: string) => {
+            setIsStreaming(true)
+            assistantContent += chunk
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: assistantContent }
+                : msg
+            ))
+          },
+          onToolStart: (tool: string, message: string) => {
+            const indicator: ToolIndicator = {
+              id: `${Date.now()}-${tool}`,
+              tool,
+              message,
+              timestamp: new Date(),
+              active: true
+            }
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, toolIndicators: [...(msg.toolIndicators || []), indicator] }
+                : msg
+            ))
+          },
+          onToolEnd: (tool: string, message: string) => {
+            setMessages(prev => prev.map(msg => {
+              if (msg.id !== assistantMessageId) return msg
+              const updatedIndicators = (msg.toolIndicators || []).map(ind => 
+                ind.tool === tool && ind.active
+                  ? { ...ind, active: false, message }
+                  : ind
+              )
+              return { ...msg, toolIndicators: updatedIndicators }
+            }))
+          },
+          onThinking: (message: string) => {
+            // Could show a thinking indicator if needed
+          },
+          onDone: (data) => {
+            setIsLoading(false)
+            setIsStreaming(false)
+          },
+          onError: (error: string) => {
+            setIsLoading(false)
+            setIsStreaming(false)
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { 
+                    ...msg, 
+                    content: `I apologize, but I encountered an error while trying to answer your question: ${error}. Please make sure your OpenAI API key is configured correctly.`
+                  }
+                : msg
+            ))
+          }
+        }
+      )
     } catch (error) {
       console.error('Error in handleSendMessage:', error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `I apologize, but I encountered an error while trying to answer your question: ${error instanceof Error ? error.message : 'Unknown error'}. Please make sure your OpenAI API key is configured correctly.`,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
-    } finally {
       setIsLoading(false)
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessageId 
+          ? { 
+              ...msg, 
+              content: `I apologize, but I encountered an error while trying to answer your question: ${error instanceof Error ? error.message : 'Unknown error'}. Please make sure your OpenAI API key is configured correctly.`
+            }
+          : msg
+      ))
     }
   }
 
@@ -298,19 +374,18 @@ export default function Home() {
             ) : null}
             
             <div className="max-w-4xl mx-auto space-y-4">
-              {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
-              
-              {isLoading && (
-                <div className="py-8 flex justify-center">
-                  <div className="flex gap-2">
-                    <span className="w-3 h-3 rounded-full bg-chat-primary animate-typing"></span>
-                    <span className="w-3 h-3 rounded-full bg-chat-secondary animate-typing typing-delay-1"></span>
-                    <span className="w-3 h-3 rounded-full bg-chat-accent animate-typing typing-delay-2"></span>
-                  </div>
-                </div>
-              )}
+              {messages.map((message, index) => {
+                const lastMessage = messages[messages.length - 1]
+                const isLastMessage = message.id === lastMessage?.id
+                const shouldShowStreaming = isStreaming && message.role === 'assistant' && isLastMessage
+                return (
+                  <ChatMessage 
+                    key={message.id} 
+                    message={message} 
+                    isStreaming={shouldShowStreaming} 
+                  />
+                )
+              })}
             </div>
           </div>
 
